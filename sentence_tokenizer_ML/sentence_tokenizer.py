@@ -8,12 +8,13 @@ import re
 
 
 class sentence_tokenizer():
-	def __init__(self, dire, suf, model):
+	def __init__(self, dire, suf, model, lang):
 		self.dire = dire
 		self.suf = suf
 		self.model = model 
+		self.lang = lang
 		self.abbreviation = ['Jan.','Feb.','Mar.','April.','May.','Jun.','Jul.','Aug.','Sep.','Oct.','Nov.','Dec.','a.k.a','No.','Mr.','Ms.']
-	def english_sentence(self):
+	def main(self):
 		jobs = []
 		for source_document in [d for d in os.listdir(self.dire) if d.endswith('.' + self.suf)]:
 			source_document = os.path.join(self.dire, source_document)
@@ -21,14 +22,23 @@ class sentence_tokenizer():
 				sys.stderr.write("ERROR: file {0} expected, but not found\n".format(f))
 				exit()
 			jobs.append(source_document)
-		print("The number of English source is", len(jobs))
-		print("English sentence tokenizer start!")
+		print("The number of source is", len(jobs))
+		if self.lang == 'eng':
+			print("English sentence tokenizer start!")
+		elif self.lang == 'kor':
+			print("Korean sentence tokenizer start!")
 		tf.set_random_seed(777)
-		X = tf.placeholder(tf.float32, shape = [None, 10])
+		if self.lang == 'eng':
+			X = tf.placeholder(tf.float32, shape = [None, 10])
+		elif self.lang == 'kor':
+			X = tf.placeholder(tf.float32, shape = [None, 3])
 		Y = tf.placeholder(tf.float32, shape = [None, 1])
-		W1 = tf.get_variable("W1", shape = [10, 1], initializer = tf.contrib.layers.xavier_initializer())
-		b1 = tf.Variable(tf.zeros([1]))
-		hypothesis = tf.sigmoid(tf.matmul(X,W1) + b1)
+		if self.lang == 'eng':
+			W = tf.get_variable("W", shape = [10, 1], initializer = tf.contrib.layers.xavier_initializer())
+		elif self.lang == 'kor':
+			W = tf.get_variable("W", shape = [3, 1], initializer = tf.contrib.layers.xavier_initializer())
+		B = tf.Variable(tf.zeros([1]))
+		hypothesis = tf.sigmoid(tf.matmul(X,W) + B)
 		saver = tf.train.Saver()
 		predicted = tf.cast(hypothesis > 0.5 , dtype = tf.float32)
 		with tf.Session() as sess:
@@ -39,9 +49,14 @@ class sentence_tokenizer():
 				target = open("sentence_tokenizer/"+source_document,'w')
 				source_list = source.readlines()
 				source_trigram = self.make_trigram(source_list)
-				source_feature_set = self.make_english_feature_set(source_trigram)
+				if len(source_trigram) < 5:
+					continue
+				if self.lang == 'eng':
+					source_feature_set = self.make_english_feature_set(source_trigram)
+				elif self.lang == 'kor':
+					source_feature_set = self.make_korean_feature_set(source_trigram)
 				h, correct = sess.run([hypothesis, predicted], feed_dict = {X: source_feature_set })
-				source_sentence = self.make_english_sentence(correct, source_trigram)
+				source_sentence = self.make_sentence(correct, source_trigram)
 				for sentence in source_sentence:
 					if len(sentence) >= 3:
 						target.write(sentence)
@@ -49,7 +64,7 @@ class sentence_tokenizer():
 				target.close()
 				i += 1
 				if i % 1000 == 0:
-					print(str(i), "english source complete...")
+					print(str(i), "source complete...")
 			
 	def make_trigram(self, source_list):
 		source_trigram = []
@@ -120,8 +135,27 @@ class sentence_tokenizer():
 			tmp_feature = copy.deepcopy(feature_set)
 			source_feature_set.append(tmp_feature)
 		return source_feature_set  
+
+	def make_korean_feature_set(self, source_trigram):
+		source_feature_set =[]
+		feature_set = [0 for i in range(3)]
+		punct = ['.','?','!']
+		quotes = ['\'','\"','“','‘']
+		parenthese = ['(','[','{',')',']','}']
+		for trigram in source_trigram:
+			tmp_split = trigram.split()
+			feature_set = [0 for i in range(3)]
+			if tmp_split[1][-1] in punct:
+				feature_set[0] = 1
+			if tmp_split[2][0] in quotes:
+				feature_set[1] = 1
+			if tmp_split[1][-1] in parenthese:
+				feature_set[2] = 1
+			tmp_feature = copy.deepcopy(feature_set)
+			source_feature_set.append(tmp_feature)
+		return source_feature_set
 	
-	def make_english_sentence(self, correct, source_trigram):
+	def make_sentence(self, correct, source_trigram):
 		source_sentence = [] 
 		sentence_tmp =''
 		for i in range(len(correct)):
@@ -141,12 +175,13 @@ if __name__ == '__main__':
 	parser.add_argument("--dire", help = 'Source directory.')
 	parser.add_argument("--suf", help = 'Source file suffix.')
 	parser.add_argument("--model", help = 'Sentence tokenizer model.')
+	parser.add_argument("--lang", help = 'Sentence tokenizer language.')
 	args = parser.parse_args()
 
-	if args.dire is None or args.suf is None or args.model is None:
+	if args.dire is None or args.suf is None or args.model is None or args.lang is None:
 		parser.print_help()
 		sys.exit()
 	
-	sent = sentence_tokenizer(args.dire, args.suf, args.model)
-	sent.english_sentence()
+	sent = sentence_tokenizer(args.dire, args.suf, args.model, args.lang)
+	sent.main()
 

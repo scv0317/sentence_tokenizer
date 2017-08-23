@@ -9,33 +9,40 @@ from datetime import datetime
 
 
 class training():
-	def __init__(self, dire, suf, lang, mode):
-		self.dire = dire
-		self.suf = suf 
-		self.lang = lang
-		self.mode = mode	
+	default_options = {
+	'dire': None,
+	'suf': None,
+	'lang': None,
+	'mode': None,
+	}
 
+	def __init__(self, options):
+		self.options = self.default_options.copy()
+		self.options.update(options)
+
+    # 학습 데이터 set을 만들기 위한 함수다.
+    # csv 파일로 만들어 지며, trigram에 대한 feature set으로 데이터 set이 만들어진다. 
 	def making_data(self):
-		jobs =[] 
-		for source_document in [d for d in os.listdir(self.dire) if d.endswith('.' + self.suf)]:
-			source_document = os.path.join(self.dire, source_document)
+		jobs =[]
+		for source_document in [d for d in os.listdir(self.options['dire']) if d.endswith('.' + self.options['suf'])]:
+			source_document = os.path.join(self.options['dire'], source_document)
 			if not os.path.isfile(source_document):
 				sys.stderr.write("ERROR: file {0} expected, but not found\n".format(f))
 				exit()
 			jobs.append(source_document)
 		print("The number of train file is", len(jobs))
 		print("Making data start!")
-		train_file = open("train_data."+self.lang+".csv", self.mode)
-		test_file = open("test_data."+self.lang+".csv", self.mode)
+		train_file = open("train_data."+self.options['lang']+".csv", self.options['mode'])
+		test_file = open("test_data."+self.options['lang']+".csv", self.options['mode'])
 		i = 0 
 		for source_document in jobs:
 			i += 1
 			source = open(source_document,"r")
 			sentences = source.readlines()
 			trigram_list = self.make_trigram(sentences)
-			if self.lang == 'kor':
+			if self.options['lang'] == 'kor':
 				feature_set_list = self.make_feature_set_kor(trigram_list)
-			elif self.lang == 'eng':
+			elif self.options['lang'] == 'eng':
 				feature_set_list = self.make_feature_set_eng(trigram_list)
 			for feature_set in feature_set_list:
 				if i < 100:
@@ -47,6 +54,7 @@ class training():
 		test_file.close()
 		print("Finish making train data!")
 
+    # 한 article에 있는 contents 들을 trigram으로 만든다.
 	def make_trigram(self, sentences):
 		trigram_list = []
 		trigram = []	
@@ -68,6 +76,7 @@ class training():
 			trigram_list.append(str(trigram[i][0])+" "+str(trigram[i][1])+" "+str(trigram[i][2])+" "+str(label[i]))
 		return trigram_list
 
+    # 영어 featrue set은 총 10가지의 feature로 이루어진다. 
 	def make_feature_set_eng(self, trigram_list):
 		feature_set_list = []
 		feature = []
@@ -128,6 +137,8 @@ class training():
 			feature_set_list.append(feature_tmp)
 
 		return feature_set_list
+
+    # 한글에 대한 feature는 총 3가지로 이루어진다. 
 	def make_feature_set_kor(self, trigram_list):
 		feature_set_list = []
 		feature = []
@@ -164,10 +175,12 @@ class training():
 			feature_set_list.append(feature_tmp)
 		return feature_set_list
 			
+    # 모델을 학습시킨다. 
 	def training_data(self):
 		tf.set_random_seed(777)
-		xy = np.loadtxt("train_data."+self.lang+".csv",delimiter = ',', dtype = np.float32)
-		test = np.loadtxt("test_data."+self.lang+".csv",delimiter = ',', dtype = np.float32)
+		xy = np.loadtxt("train_data."+self.options['lang']+".csv",delimiter = ',', dtype = np.float32)
+		test = np.loadtxt("test_data."+self.options['lang']+".csv",delimiter = ',', dtype = np.float32)
+
 		x_data = xy[:,0:-1]
 		y_data = xy[:,[-1]]
 		x_test = test[:,0:-1]
@@ -178,16 +191,16 @@ class training():
 		training_epochs = 100
 		batch_size = 10000
 		
-		if self.lang == 'eng':
+		if self.options['lang'] == 'eng':
 			X = tf.placeholder(tf.float32, shape = [None, 10])
-		elif self.lang =='kor':
+		elif self.options['lang'] =='kor':
 			X = tf.placeholder(tf.float32, shape = [None, 3])
 
 		Y = tf.placeholder(tf.float32, shape = [None, 1])
 		keep_prob = tf.placeholder(tf.float32)
-		if self.lang == 'eng':
+		if self.options['lang'] == 'eng':
 			W = tf.get_variable("W",shape = [10, 1], initializer = tf.contrib.layers.xavier_initializer())
-		elif self.lang == 'kor':
+		elif self.options['lang'] == 'kor':
 			W = tf.get_variable("W",shape = [3, 1], initializer = tf.contrib.layers.xavier_initializer())
 		B = tf.Variable(tf.random_normal([1]))
 
@@ -243,20 +256,37 @@ if __name__ == '__main__':
 	parser.add_argument("--mode", help = 'w or a')
 	args = parser.parse_args()
 
-	if args.dire is None or args.suf is None or args.lang is None:
+	options = {}
+		
+	if args.train is None:
 		parser.print_help()
 		sys.exit()
+
 	if str(args.train).upper() == 'Y':
-		train = training(args.dire, args.suf, args.lang, args.mode)
+		if args.lang is None:
+			parser.print_help()
+			sys.exit()
+		options['lang'] = args.lang 
+		train = training(options)
 		start = datetime.now()
 		train.training_data()
 		end = datetime.now()
 		print("Training time: {}".format(end - start))
-	else:
-		args.train = 'N'
-		train = training(args.dire, args.suf, args.lang, args.mode)
+
+	elif str(args.train).upper() == 'N':
+		if args.dire is None or args.suf is None or args.mode is None:
+			parser.print_help()
+			sys.exit()
+		options['dire'] = args.dire
+		options['suf'] = args.suf
+		options['mode'] = args.mode
+		train = training(options)
 		start = datetime.now()
 		train.making_data()
 		end = datetime.now()
-		print("Making time: {}".format(end - start))
+		print("Making time: {}".format(end - start)) 	
+
+	else:
+		parser.print_help()
+		sys.exit()
 

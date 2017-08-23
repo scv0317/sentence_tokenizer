@@ -224,6 +224,7 @@ if __name__ == '__main__':
 	parser.add_argument("--engdir", help = "English Source Directory.")
 	parser.add_argument("--eng", help = "English Source Suffix.")
 	args = parser.parse_args()
+    
 
 	if (args.kordir is None or args.kor is None) and (args.engdir is None or args.eng is None):
 		parser.print_help()

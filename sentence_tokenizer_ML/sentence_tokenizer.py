@@ -98,7 +98,6 @@ class sentence_tokenizer():
 				abbreviation_upper = p.findall(trigram_split[i])
 				for ab in abbreviation_upper:
 					trigram_split[i] = trigram_split[i].replace(ab, 'AB2')
-			#trigram_split = source_trigram[i].split()
 			feature_set = [0 for i in range(10)]
 			# feature 1
 			if trigram_split[0][0].islower() and trigram_split[2][0].isupper():
